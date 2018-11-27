@@ -15,6 +15,10 @@ namespace mxnet {
       We have added an additional dimension to the tensors to support an entire mini-batch
       The goal here is to be correct AND fast.
       We have some nice #defs for you below to simplify indexing. Feel free to use them, or create your own.
+
+      x: B C H W
+      y: B M H W
+      k: M C K K
       */
 
       const int H_out = H - K + 1;
