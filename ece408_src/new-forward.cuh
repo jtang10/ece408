@@ -309,8 +309,6 @@ void forward<gpu, float>(mshadow::Tensor<gpu, 4, float> &y,
 
   dim3 gridDim(B, M, Z);
   dim3 blockDim(TILE_WIDTH, TILE_WIDTH, 1);
-
-  // Call the kernel
   forward_m4<<<gridDim, blockDim, shmem_size>>>(y.dptr_,x.dptr_,w.dptr_, B,M,C,H,W,K, H_grid, W_grid);
 
 
