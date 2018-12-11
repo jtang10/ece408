@@ -5,7 +5,7 @@
 #include <mxnet/base.h>
 
 #define MAX_NUM_THREADS 1024
-#define TILE_WIDTH 16
+#define TILE_WIDTH 8
 #define size_t unsigned int
 
 namespace mxnet 
@@ -22,10 +22,10 @@ __global__ void forward_shared_unroll(float *y, const float *x, const float *k,
 	__shared__ float shmem_X[TILE_WIDTH][TILE_WIDTH];
 	__shared__ float shmem_K[TILE_WIDTH][TILE_WIDTH];
 
-	size_t bx = blockIdx.x;  size_t by = blockIdx.y;
-	size_t tx = threadIdx.x; size_t ty = threadIdx.x;
-  size_t row = by * blockDim.y + ty;
-  size_t col = bx * blockDim.x + tx;
+	int bx = blockIdx.x;  int by = blockIdx.y;
+	int tx = threadIdx.x; int ty = threadIdx.x;
+  int row = by * blockDim.y + ty;
+  int col = bx * blockDim.x + tx;
   int numMatACol = C * K * K;
   int b = blockIdx.z;
 
@@ -33,6 +33,7 @@ __global__ void forward_shared_unroll(float *y, const float *x, const float *k,
   int W_out = W - K + 1;
 
   float acc = 0;
+  #pragma unroll
   for (int i = 0; i < numMatACol / TILE_WIDTH; ++i) {
   	int temp_col = i * TILE_WIDTH + tx;
   	int temp_row = i * TILE_WIDTH + ty;
