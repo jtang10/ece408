@@ -19,10 +19,10 @@ commands:
     - /usr/bin/time python final.py 100 # execute code
     - /usr/bin/time python final.py 1000 # execute code
     - /usr/bin/time python final.py 10000 # execute code
-    #
-    - nvprof -o timeline_van.nvvp python final.py 1000 # execute code
-    - nvprof --kernels "::forward:1" --analysis-metrics -o forward1_analysis_van.nvvp python final.py 1000 # execute code
-    - nvprof --kernels "::forward:2" --analysis-metrics -o forward2_analysis_van.nvvp python final.py 1000
+    # #
+    # - nvprof -o timeline_van.nvvp python final.py 1000 # execute code
+    # - nvprof --kernels "::forward:1" --analysis-metrics -o forward1_analysis_van.nvvp python final.py 1000 # execute code
+    # - nvprof --kernels "::forward:2" --analysis-metrics -o forward2_analysis_van.nvvp python final.py 1000
 
     # - nvprof -f -o timeline.nvvp python m1.2.py # execute code
     # - nvprof -f --analysis-metrics -o analysis.nvvp python m1.2.py # execute code
