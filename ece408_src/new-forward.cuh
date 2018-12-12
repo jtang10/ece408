@@ -42,8 +42,8 @@ __global__ void forward_shared_unroll(float *y, const float *x, const float *k, 
   int X_h = col / W_out;
   int X_w = col % W_out;
 
-  int X_h2 = (col + blockDim.x) / W_out;
-  int X_w2 = (col + blockDim.x) % W_out;
+  int X_h2 = (col + TILE_WIDTH) / W_out;
+  int X_w2 = (col + TILE_WIDTH) % W_out;
 
   int K_c  = getC(temp_col);
   int K_k1 = getK1(temp_col);
@@ -56,7 +56,7 @@ __global__ void forward_shared_unroll(float *y, const float *x, const float *k, 
   float temp_x2 = x4d(bz, X_c, X_h2 + X_p, X_w2 + X_q);
 
   #pragma unroll
-  for (int i = 0; i < (numMatACol + 2*TILE_WIDTH - 1) / (2 * TILE_WIDTH); ++i) {
+  for (int i = 0; i < (numMatACol + TILE_WIDTH - 1) / (TILE_WIDTH); ++i) {
     if (temp_col < numMatACol && row < M) {
       shmem_K[ty][tx] = temp_k;
     } else {
@@ -76,8 +76,8 @@ __global__ void forward_shared_unroll(float *y, const float *x, const float *k, 
     }
     __syncthreads();
 
-    temp_col += 2*TILE_WIDTH;
-    temp_row += 2*TILE_WIDTH;
+    temp_col += TILE_WIDTH;
+    temp_row += TILE_WIDTH;
     K_c  = getC(temp_col);
     K_k1 = getK1(temp_col);
     K_k2 = getK2(temp_col);
@@ -85,7 +85,8 @@ __global__ void forward_shared_unroll(float *y, const float *x, const float *k, 
     X_p = getK1(temp_row);
     X_q = getK2(temp_row);
     temp_k = k4d(row, K_c, K_k1, K_k2);
-    temp_x = x4d(bz, X_c, X_h + X_p, X_w + X_q);
+    temp_x  = x4d(bz, X_c, X_h + X_p,  X_w + X_q);
+    temp_x2 = x4d(bz, X_c, X_h2 + X_p, X_w2 + X_q);
 
     #pragma unroll
     for (int q = 0; q < TILE_WIDTH; ++q) {
@@ -102,6 +103,9 @@ __global__ void forward_shared_unroll(float *y, const float *x, const float *k, 
 
     if (row < M && col < W_out * H_out) {
       y4d(bz, row, X_h, X_w) = acc;
+    }
+
+    if (row < M && col + TILE_WIDTH < W_out * H_out) {
       y4d(bz, row, X_h2, X_w2) = acc2;
     }
   }
