@@ -5,48 +5,42 @@
 #include <mxnet/base.h>
 
 #define MAX_NUM_THREADS 1024
-#define TILE_WIDTH 8
+#define TILE_WIDTH_ONE 12
+#define TILE_WIDTH_TWO 24
 #define size_t unsigned int
 
-namespace mxnet 
+namespace mxnet
 {
-namespace op 
+namespace op
 {
-__global__ void forward_shared_unroll(float *y, const float *x, const float *k, 
-                               				const int B, const int M, const int C, 
+__global__ void forward_shared_unroll_one(float *y, const float *x, const float *k,
+                               				const int B, const int M, const int C,
                                				const int H, const int W, const int K, const int H_out, const int W_out) {
 	#define y4d(i3, i2, i1, i0) y[(i3) * (M * H_out * W_out) + (i2) * (H_out * W_out) + (i1) * (W_out) + i0]
   #define x4d(i3, i2, i1, i0) x[(i3) * (C * H * W) + (i2) * (H * W) + (i1) * (W) + i0]
   #define k4d(i3, i2, i1, i0) k[(i3) * (C * K * K) + (i2) * (K * K) + (i1) * (K) + i0]
 
-	__shared__ float shmem_X[TILE_WIDTH][TILE_WIDTH];
-	__shared__ float shmem_K[TILE_WIDTH][TILE_WIDTH];
+	__shared__ float shmem_X[TILE_WIDTH_ONE * TILE_WIDTH_ONE];
+	__shared__ float shmem_K[TILE_WIDTH_ONE * TILE_WIDTH_ONE];
 
-	int bx = blockIdx.x;  int by = blockIdx.y;
-	int tx = threadIdx.x; int ty = threadIdx.y;
-  int row = by * blockDim.y + ty;
-  int col = bx * blockDim.x + tx;
+  int row = blockIdx.y * blockDim.y + threadIdx.y;
+  int col = blockIdx.x * blockDim.x + threadIdx.x;
   int numMatACol = C * K * K;
-  int b = blockIdx.z;
 
   float acc = 0;
+
   // #pragma unroll
-  for (int i = 0; i < ceil(1.0 * numMatACol / TILE_WIDTH); ++i) {
-  	int temp_col = i * TILE_WIDTH + tx;
-  	int temp_row = i * TILE_WIDTH + ty;
+  for (int i = 0; i < (numMatACol - 1) / TILE_WIDTH_ONE + 1; ++i) { // ceil
+  	int temp_col = i * TILE_WIDTH_ONE + threadIdx.x;
+  	int temp_row = i * TILE_WIDTH_ONE + threadIdx.y;
 
-  	int K_m = row;
-  	int K_c = temp_col / (K * K);
-  	int K_k1 = (temp_col % (K * K)) / K;
-  	int K_k2 = (temp_col % (K * K)) % K;
-
-  	if (temp_col < numMatACol && row < M) {
-  		shmem_K[ty][tx] = k4d(K_m, K_c, K_k1, K_k2);
+  	if (temp_col < numMatACol && row < M) { //  && row < M
+      shmem_K[threadIdx.y * TILE_WIDTH_ONE + threadIdx.x] = k[row * numMatACol + temp_col];
   	} else {
-  		shmem_K[ty][tx] = 0;
+  		shmem_K[threadIdx.y * TILE_WIDTH_ONE + threadIdx.x] = 0;
   	}
 
-  	int X_b = b;
+  	// int X_b = b;
   	int X_c = temp_row / (K * K);
   	int X_h = col / W_out;
   	int X_w = col % W_out;
@@ -54,26 +48,22 @@ __global__ void forward_shared_unroll(float *y, const float *x, const float *k,
     int X_q = (temp_row % (K * K)) % K;
 
   	if (temp_row < numMatACol && col < H_out * W_out) {
-  		shmem_X[ty][tx] = x4d(X_b, X_c, X_h + X_p, X_w + X_q);
+  		shmem_X[threadIdx.y * TILE_WIDTH_ONE + threadIdx.x] = x4d(blockIdx.z, X_c, X_h + X_p, X_w + X_q);
   	} else {
-  		shmem_X[ty][tx] = 0;
+  		shmem_X[threadIdx.y * TILE_WIDTH_ONE + threadIdx.x] = 0;
   	}
 
   	__syncthreads();
 
-  	for (int q = 0; q < TILE_WIDTH; ++q) {
-  		acc += shmem_K[ty][q] * shmem_X[q][tx];
+    #pragma unroll
+  	for (int q = 0; q < TILE_WIDTH_ONE; ++q) {
+  		acc += shmem_K[threadIdx.y * TILE_WIDTH_ONE + q] * shmem_X[q * TILE_WIDTH_ONE + threadIdx.x];
   	}
 
   	__syncthreads();
-
-  	int Y_b = b;
-  	int Y_m = row;
-  	int Y_h = col / W_out;
-  	int Y_w = col % W_out;
 
   	if (row < M && col < W_out * H_out) {
-	  	y4d(Y_b, Y_m, Y_h, Y_w) = acc;
+      y[blockIdx.z * (M * H_out * W_out) + row * (H_out * W_out) + col] = acc;
   	}
   }
 
@@ -83,7 +73,68 @@ __global__ void forward_shared_unroll(float *y, const float *x, const float *k,
 }
 
 
-/* 
+
+__global__ void forward_shared_unroll_two(float *y, const float *x, const float *k,
+                               				const int B, const int M, const int C,
+                               				const int H, const int W, const int K, const int H_out, const int W_out) {
+	#define y4d(i3, i2, i1, i0) y[(i3) * (M * H_out * W_out) + (i2) * (H_out * W_out) + (i1) * (W_out) + i0]
+  #define x4d(i3, i2, i1, i0) x[(i3) * (C * H * W) + (i2) * (H * W) + (i1) * (W) + i0]
+  #define k4d(i3, i2, i1, i0) k[(i3) * (C * K * K) + (i2) * (K * K) + (i1) * (K) + i0]
+
+	__shared__ float shmem_X[TILE_WIDTH_TWO * TILE_WIDTH_TWO];
+	__shared__ float shmem_K[TILE_WIDTH_TWO * TILE_WIDTH_TWO];
+
+  int row = blockIdx.y * blockDim.y + threadIdx.y;
+  int col = blockIdx.x * blockDim.x + threadIdx.x;
+  int numMatACol = C * K * K;
+
+  float acc = 0;
+
+  // #pragma unroll
+  for (int i = 0; i < (numMatACol - 1) / TILE_WIDTH_TWO + 1; ++i) { // ceil
+  	int temp_col = i * TILE_WIDTH_TWO + threadIdx.x;
+  	int temp_row = i * TILE_WIDTH_TWO + threadIdx.y;
+
+  	if (temp_col < numMatACol && row < M) { //  && row < M
+      shmem_K[threadIdx.y * TILE_WIDTH_TWO + threadIdx.x] = k[row * numMatACol + temp_col];
+  	} else {
+  		shmem_K[threadIdx.y * TILE_WIDTH_TWO + threadIdx.x] = 0;
+  	}
+
+  	// int X_b = b;
+  	int X_c = temp_row / (K * K);
+  	int X_h = col / W_out;
+  	int X_w = col % W_out;
+  	int X_p = (temp_row % (K * K)) / K;
+    int X_q = (temp_row % (K * K)) % K;
+
+  	if (temp_row < numMatACol && col < H_out * W_out) {
+  		shmem_X[threadIdx.y * TILE_WIDTH_TWO + threadIdx.x] = x4d(blockIdx.z, X_c, X_h + X_p, X_w + X_q);
+  	} else {
+  		shmem_X[threadIdx.y * TILE_WIDTH_TWO + threadIdx.x] = 0;
+  	}
+
+  	__syncthreads();
+
+    #pragma unroll
+  	for (int q = 0; q < TILE_WIDTH_TWO; ++q) {
+  		acc += shmem_K[threadIdx.y * TILE_WIDTH_TWO + q] * shmem_X[q * TILE_WIDTH_TWO + threadIdx.x];
+  	}
+
+  	__syncthreads();
+
+  	if (row < M && col < W_out * H_out) {
+      y[blockIdx.z * (M * H_out * W_out) + row * (H_out * W_out) + col] = acc;
+  	}
+  }
+
+  #undef y4d
+  #undef x4d
+  #undef k4d
+}
+
+
+/*
    This function is called by new-inl.h
    Any code you write should be executed by this function.
    For ECE408, we only expect the float version of the operator to be called,
@@ -91,7 +142,7 @@ __global__ void forward_shared_unroll(float *y, const float *x, const float *k,
 */
 template <>
 void forward<gpu, float>(mshadow::Tensor<gpu, 4, float> &y,
-                         const mshadow::Tensor<gpu, 4, float> &x, 
+                         const mshadow::Tensor<gpu, 4, float> &x,
                          const mshadow::Tensor<gpu, 4, float> &w) {
   // Extract the tensor dimensions into B,M,C,H,W,K
   // printf("X: %u X %u X %u X %u matrix\n", x.size(0), x.size(1), x.size(2), x.size(3));
@@ -109,14 +160,51 @@ void forward<gpu, float>(mshadow::Tensor<gpu, 4, float> &y,
   const int W_out = W - K + 1;
 
   // newest kernel based on exam2
-  dim3 gridDim(ceil(1.0*H_out*W_out/TILE_WIDTH), ceil(1.0*M/TILE_WIDTH), B);
-  dim3 blockDim(TILE_WIDTH, TILE_WIDTH, 1);
-  forward_shared_unroll<<<gridDim, blockDim>>>(y.dptr_,x.dptr_,w.dptr_, B,M,C,H,W,K, H_out, W_out);
+
+  // printf("ceil(1.0*M/TILE_WIDTH): %f\n", ceil(1.0*M/TILE_WIDTH));
+  // printf("TILE_WIDTH: %d\n", TILE_WIDTH);
+  // printf("M: %d\n", M);
+  // printf("B: %d\n", B);
+  // printf("C: %d\n", C);
+  // printf("H: %d\n", H);
+  // printf("W: %d\n", W);
+  // printf("K: %d\n", K);
+  // ceil(1.0*M/TILE_WIDTH): 1.000000
+  // // TILE_WIDTH: 12
+  // // M: 12
+  // // B: 10000
+  // // C: 1
+  // // H: 72
+  // // W: 72
+  // // K: 7
+  // // Op Time: 0.037503
+  // // ceil(1.0*M/TILE_WIDTH): 2.000000
+  // // TILE_WIDTH: 12
+  // // M: 24
+  // // B: 10000
+  // // C: 12
+  // // H: 33
+  // // W: 33
+  // // K: 7
+
+  if (M == 24) {
+    dim3 gridDim(((H_out*W_out-1)/TILE_WIDTH_TWO+1), ((M-1)/TILE_WIDTH_TWO+1), B);
+    dim3 blockDim(TILE_WIDTH_TWO, TILE_WIDTH_TWO, 1);
+    forward_shared_unroll_two<<<gridDim, blockDim>>>(y.dptr_,x.dptr_,w.dptr_, B,M,C,H,W,K, H_out, W_out);
+  } else {
+    dim3 gridDim(((H_out*W_out-1)/TILE_WIDTH_ONE+1), ((M-1)/TILE_WIDTH_ONE+1), B);
+    dim3 blockDim(TILE_WIDTH_ONE, TILE_WIDTH_ONE, 1);
+    forward_shared_unroll_one<<<gridDim, blockDim>>>(y.dptr_,x.dptr_,w.dptr_, B,M,C,H,W,K, H_out, W_out);
+  }
+  // dim3 gridDim(ceil(1.0*H_out*W_out/TILE_WIDTH), 1, B); // M == TILE_WIDTH == 12
+  // dim3 blockDim(TILE_WIDTH, TILE_WIDTH, 1);
+
+  // forward_shared_unroll<<<gridDim, blockDim>>>(y.dptr_,x.dptr_,w.dptr_, B,M,C,H,W,K, H_out, W_out);
   // Use MSHADOW_CUDA_CALL to check for CUDA runtime errors.
   MSHADOW_CUDA_CALL(cudaDeviceSynchronize());
 }
 
-/* 
+/*
     This tells mxnet how to do an op when it's not a float.
     This is not used in the ECE408 project
 */

@@ -15,15 +15,14 @@ commands:
     - /bin/bash -c "for src in ece408_src/*; do cp -v $src /mxnet/src/operator/custom/.; done" # copy source files to mxnet tree
     - nice -n20 make -C /mxnet # build mxnet
     - pip2 install --user -e /mxnet/python   # install python bindings
-    # - /usr/bin/time python m1.1.py # execute code
-    # - /usr/bin/time python m1.2.py # execute code
-    # - /usr/bin/time python m2.1.py # execute code
+
     - /usr/bin/time python final.py 100 # execute code
     - /usr/bin/time python final.py 1000 # execute code
     - /usr/bin/time python final.py 10000 # execute code
-    # - nvprof -o timeline.nvvp python m3.1.py 100 # execute code
-    # - nvprof --kernels "::forward:1" --analysis-metrics -o forward1_analysis.nvvp python m3.1.py 100 # execute code
-    # - nvprof --kernels "::forward:2" --analysis-metrics -o forward2_analysis.nvprof python m3.1.py 100
-    # - /usr/bin/time python m4.1.py # execute code
+    #
+    - nvprof -o timeline_van.nvvp python final.py 1000 # execute code
+    - nvprof --kernels "::forward:1" --analysis-metrics -o forward1_analysis_van.nvvp python final.py 1000 # execute code
+    - nvprof --kernels "::forward:2" --analysis-metrics -o forward2_analysis_van.nvvp python final.py 1000
+
     # - nvprof -f -o timeline.nvvp python m1.2.py # execute code
     # - nvprof -f --analysis-metrics -o analysis.nvvp python m1.2.py # execute code
