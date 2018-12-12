@@ -187,6 +187,20 @@ void forward<gpu, float>(mshadow::Tensor<gpu, 4, float> &y,
   // // W: 33
   // // K: 7
 
+  // Maximum global memory size: 12618760192
+  // Maximum constant memory size: 65536
+  // Maximum shared memory size per block: 49152
+  // Maximum block dimensions: 1024 x 1024 x 64
+  // Maximum grid dimensions: 2147483647 x 65535 x 65535
+
+  // X: 100 X 1 X 72 X 72 matrix
+  // K: 12 X 1 X 7 X 7 matrix
+  // Y: 100 X 12 X 66 X 66 matrix
+
+  // X: 100 X 12 X 33 X 33 matrix
+  // K: 24 X 12 X 7 X 7 matrix
+  // Y: 100 X 24 X 27 X 27 matrix
+
   if (M == 24) {
     dim3 gridDim(((H_out*W_out-1)/TILE_WIDTH_TWO+1), ((M-1)/TILE_WIDTH_TWO+1), B);
     dim3 blockDim(TILE_WIDTH_TWO, TILE_WIDTH_TWO, 1);
