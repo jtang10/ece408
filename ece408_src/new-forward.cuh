@@ -23,8 +23,9 @@ __global__ void forward_shared_unroll_one(float *y, const float *x, const float 
 	__shared__ float shmem_X[TILE_WIDTH_ONE * TILE_WIDTH_ONE];
 	__shared__ float shmem_K[TILE_WIDTH_ONE * TILE_WIDTH_ONE];
 
-  int row = blockIdx.y * blockDim.y + threadIdx.y;
+  // int row = blockIdx.y * blockDim.y + threadIdx.y;
   int col = blockIdx.x * blockDim.x + threadIdx.x;
+  int location = threadIdx.y * TILE_WIDTH_ONE + threadIdx.x;
   int numMatACol = C * K * K;
 
   float acc = 0;
@@ -34,10 +35,11 @@ __global__ void forward_shared_unroll_one(float *y, const float *x, const float 
   	int temp_col = i * TILE_WIDTH_ONE + threadIdx.x;
   	int temp_row = i * TILE_WIDTH_ONE + threadIdx.y;
 
-  	if (temp_col < numMatACol && row < M) { //  && row < M
-      shmem_K[threadIdx.y * TILE_WIDTH_ONE + threadIdx.x] = k[row * numMatACol + temp_col];
+
+  	if (temp_col < numMatACol) { //  && row < M
+      shmem_K[location] = k[threadIdx.y * numMatACol + temp_col];
   	} else {
-  		shmem_K[threadIdx.y * TILE_WIDTH_ONE + threadIdx.x] = 0;
+  		shmem_K[location] = 0;
   	}
 
   	// int X_b = b;
@@ -48,9 +50,9 @@ __global__ void forward_shared_unroll_one(float *y, const float *x, const float 
     int X_q = (temp_row % (K * K)) % K;
 
   	if (temp_row < numMatACol && col < H_out * W_out) {
-  		shmem_X[threadIdx.y * TILE_WIDTH_ONE + threadIdx.x] = x4d(blockIdx.z, X_c, X_h + X_p, X_w + X_q);
+  		shmem_X[location] = x4d(blockIdx.z, X_c, X_h + X_p, X_w + X_q);
   	} else {
-  		shmem_X[threadIdx.y * TILE_WIDTH_ONE + threadIdx.x] = 0;
+  		shmem_X[location] = 0;
   	}
 
   	__syncthreads();
@@ -62,8 +64,8 @@ __global__ void forward_shared_unroll_one(float *y, const float *x, const float 
 
   	__syncthreads();
 
-  	if (row < M && col < W_out * H_out) {
-      y[blockIdx.z * (M * H_out * W_out) + row * (H_out * W_out) + col] = acc;
+  	if (threadIdx.y < M && col < W_out * H_out) {
+      y[blockIdx.z * (M * H_out * W_out) + threadIdx.y * (H_out * W_out) + col] = acc;
   	}
   }
 
@@ -84,7 +86,8 @@ __global__ void forward_shared_unroll_two(float *y, const float *x, const float 
 	__shared__ float shmem_X[TILE_WIDTH_TWO * TILE_WIDTH_TWO];
 	__shared__ float shmem_K[TILE_WIDTH_TWO * TILE_WIDTH_TWO];
 
-  int row = blockIdx.y * blockDim.y + threadIdx.y;
+  // int row = blockIdx.y * blockDim.y + threadIdx.y;
+  int location = threadIdx.y * TILE_WIDTH_TWO + threadIdx.x;
   int col = blockIdx.x * blockDim.x + threadIdx.x;
   int numMatACol = C * K * K;
 
@@ -95,10 +98,10 @@ __global__ void forward_shared_unroll_two(float *y, const float *x, const float 
   	int temp_col = i * TILE_WIDTH_TWO + threadIdx.x;
   	int temp_row = i * TILE_WIDTH_TWO + threadIdx.y;
 
-  	if (temp_col < numMatACol && row < M) { //  && row < M
-      shmem_K[threadIdx.y * TILE_WIDTH_TWO + threadIdx.x] = k[row * numMatACol + temp_col];
+  	if (temp_col < numMatACol) { //  && row < M
+      shmem_K[location] = k[threadIdx.y * numMatACol + temp_col];
   	} else {
-  		shmem_K[threadIdx.y * TILE_WIDTH_TWO + threadIdx.x] = 0;
+  		shmem_K[location] = 0;
   	}
 
   	// int X_b = b;
@@ -109,9 +112,9 @@ __global__ void forward_shared_unroll_two(float *y, const float *x, const float 
     int X_q = (temp_row % (K * K)) % K;
 
   	if (temp_row < numMatACol && col < H_out * W_out) {
-  		shmem_X[threadIdx.y * TILE_WIDTH_TWO + threadIdx.x] = x4d(blockIdx.z, X_c, X_h + X_p, X_w + X_q);
+  		shmem_X[location] = x4d(blockIdx.z, X_c, X_h + X_p, X_w + X_q);
   	} else {
-  		shmem_X[threadIdx.y * TILE_WIDTH_TWO + threadIdx.x] = 0;
+  		shmem_X[location] = 0;
   	}
 
   	__syncthreads();
@@ -123,8 +126,8 @@ __global__ void forward_shared_unroll_two(float *y, const float *x, const float 
 
   	__syncthreads();
 
-  	if (row < M && col < W_out * H_out) {
-      y[blockIdx.z * (M * H_out * W_out) + row * (H_out * W_out) + col] = acc;
+  	if (threadIdx.y < M && col < W_out * H_out) {
+      y[blockIdx.z * (M * H_out * W_out) + threadIdx.y * (H_out * W_out) + col] = acc;
   	}
   }
 
