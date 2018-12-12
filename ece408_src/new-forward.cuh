@@ -27,18 +27,24 @@ namespace mxnet
 namespace op 
 {
 __global__ void forward_shared_unroll(float *y, const float *x, const float *k, const int B, const int M, const int C, const int H, const int W, const int K, const int H_out, const int W_out) {
-  __shared__ float shmem_X[TILE_WIDTH][TILE_WIDTH];
+  __shared__ float shmem_X[TILE_WIDTH][TILE_WIDTH*2];
   __shared__ float shmem_K[TILE_WIDTH][TILE_WIDTH];
 
   int row = by * blockDim.y + ty;
-  int col = bx * blockDim.x + tx;
+  int col = bx * blockDim.x * 2 + tx;
   int numMatACol = C * K * K;
 
   float acc = 0;
+  float acc2 = 0;
   int temp_col = tx;
   int temp_row = ty;
+
   int X_h = col / W_out;
   int X_w = col % W_out;
+
+  int X_h2 = (col + blockDim.x) / W_out;
+  int X_w2 = (col + blockDim.x) % W_out;
+
   int K_c  = getC(temp_col);
   int K_k1 = getK1(temp_col);
   int K_k2 = getK2(temp_col);
@@ -46,10 +52,11 @@ __global__ void forward_shared_unroll(float *y, const float *x, const float *k, 
   int X_p = getK1(temp_row);
   int X_q = getK2(temp_row);
   float temp_k = k4d(row, K_c, K_k1, K_k2);
-  float temp_x = x4d(bz, X_c, X_h + X_p, X_w + X_q);
+  float temp_x  = x4d(bz, X_c, X_h + X_p,  X_w + X_q);
+  float temp_x2 = x4d(bz, X_c, X_h2 + X_p, X_w2 + X_q);
 
   #pragma unroll
-  for (int i = 0; i < (numMatACol + TILE_WIDTH - 1) / TILE_WIDTH; ++i) {
+  for (int i = 0; i < (numMatACol + 2*TILE_WIDTH - 1) / (2 * TILE_WIDTH); ++i) {
     if (temp_col < numMatACol && row < M) {
       shmem_K[ty][tx] = temp_k;
     } else {
@@ -62,10 +69,15 @@ __global__ void forward_shared_unroll(float *y, const float *x, const float *k, 
       shmem_X[ty][tx] = 0;
     }
 
+    if (temp_row < numMatACol && col + TILE_WIDTH < H_out * W_out) {
+      shmem_X[ty][tx + TILE_WIDTH] = temp_x2;
+    } else {
+      shmem_X[ty][tx + TILE_WIDTH] = 0;
+    }
     __syncthreads();
 
-    temp_col += TILE_WIDTH;
-    temp_row += TILE_WIDTH;
+    temp_col += 2*TILE_WIDTH;
+    temp_row += 2*TILE_WIDTH;
     K_c  = getC(temp_col);
     K_k1 = getK1(temp_col);
     K_k2 = getK2(temp_col);
@@ -77,7 +89,8 @@ __global__ void forward_shared_unroll(float *y, const float *x, const float *k, 
 
     #pragma unroll
     for (int q = 0; q < TILE_WIDTH; ++q) {
-      acc += shmem_K[ty][q] * shmem_X[q][tx];
+      acc  += shmem_K[ty][q] * shmem_X[q][tx];
+      acc2 += shmem_K[ty][q] * shmem_X[q][tx + TILE_WIDTH];
     }
 
     __syncthreads();
@@ -89,6 +102,7 @@ __global__ void forward_shared_unroll(float *y, const float *x, const float *k, 
 
     if (row < M && col < W_out * H_out) {
       y4d(bz, row, X_h, X_w) = acc;
+      y4d(bz, row, X_h2, X_w2) = acc2;
     }
   }
 }
