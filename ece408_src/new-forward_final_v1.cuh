@@ -18,10 +18,6 @@
 #define by blockIdx.y
 #define bz blockIdx.z
 
-#define getC(i) i/(K*K)
-#define getK1(i) (i%(K*K))/K
-#define getK2(i) (i%(K*K))%K
-
 namespace mxnet 
 {
 namespace op 
@@ -35,45 +31,36 @@ __global__ void forward_shared_unroll(float *y, const float *x, const float *k, 
   int numMatACol = C * K * K;
 
   float acc = 0;
-  int temp_col = tx;
-  int temp_row = ty;
-  int X_h = col / W_out;
-  int X_w = col % W_out;
-  int K_c  = getC(temp_col);
-  int K_k1 = getK1(temp_col);
-  int K_k2 = getK2(temp_col);
-  int X_c = getC(temp_row);
-  int X_p = getK1(temp_row);
-  int X_q = getK2(temp_row);
-  float temp_k = k4d(row, K_c, K_k1, K_k2);
-  float temp_x = x4d(bz, X_c, X_h + X_p, X_w + X_q);
-
   #pragma unroll
   for (int i = 0; i < (numMatACol + TILE_WIDTH - 1) / TILE_WIDTH; ++i) {
+    int temp_col = i * TILE_WIDTH + tx;
+    int temp_row = i * TILE_WIDTH + ty;
+
+    // int K_m = row; 
+    int K_c = temp_col / (K * K);
+    int K_k1 = (temp_col % (K * K)) / K;
+    int K_k2 = (temp_col % (K * K)) % K;
+
     if (temp_col < numMatACol && row < M) {
-      shmem_K[ty][tx] = temp_k;
+      shmem_K[ty][tx] = k4d(row, K_c, K_k1, K_k2);
     } else {
       shmem_K[ty][tx] = 0;
     }
 
+    // int X_b = b;
+    int X_c = temp_row / (K * K);
+    int X_h = col / W_out;
+    int X_w = col % W_out;
+    int X_p = (temp_row % (K * K)) / K;
+    int X_q = (temp_row % (K * K)) % K;
+
     if (temp_row < numMatACol && col < H_out * W_out) {
-      shmem_X[ty][tx] = temp_x;
+      shmem_X[ty][tx] = x4d(bz, X_c, X_h + X_p, X_w + X_q);
     } else {
       shmem_X[ty][tx] = 0;
     }
 
     __syncthreads();
-
-    temp_col += TILE_WIDTH;
-    temp_row += TILE_WIDTH;
-    K_c  = getC(temp_col);
-    K_k1 = getK1(temp_col);
-    K_k2 = getK2(temp_col);
-    X_c = getC(temp_row);
-    X_p = getK1(temp_row);
-    X_q = getK2(temp_row);
-    temp_k = k4d(row, K_c, K_k1, K_k2);
-    temp_x = x4d(bz, X_c, X_h + X_p, X_w + X_q);
 
     #pragma unroll
     for (int q = 0; q < TILE_WIDTH; ++q) {
@@ -108,15 +95,6 @@ void forward<gpu, float>(mshadow::Tensor<gpu, 4, float> &y,
   // printf("X: %u X %u X %u X %u matrix\n", x.size(0), x.size(1), x.size(2), x.size(3));
   // printf("K: %u X %u X %u X %u matrix\n", w.size(0), w.size(1), w.size(2), w.size(3));
   // printf("Y: %u X %u X %u X %u matrix\n", y.size(0), y.size(1), y.size(2), y.size(3));
-  // X: 10000 X 1 X 72 X 72 matrix
-  // K: 12 X 1 X 7 X 7 matrix
-  // Y: 10000 X 12 X 66 X 66 matrix
-  // Op Time: 0.071066
-  // X: 10000 X 12 X 33 X 33 matrix
-  // K: 24 X 12 X 7 X 7 matrix
-  // Y: 10000 X 24 X 27 X 27 matrix
-  // Op Time: 0.180310
-
 
   const int B = x.shape_[0];
   const int M = y.shape_[1];
