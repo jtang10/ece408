@@ -8,7 +8,7 @@
 #define MAX_NUM_THREADS 1024
 #define TILE_WIDTH  16
 // #define TILE_HEIGHT 16
-#define GRANULARITY 2
+#define GRANULARITY 8
 
 #define y4d(i3, i2, i1, i0) y[(i3) * (M * H_out * W_out) + (i2) * (H_out * W_out) + (i1) * (W_out) + i0]
 #define x4d(i3, i2, i1, i0) x[(i3) * (C * H * W) + (i2) * (H * W) + (i1) * (W) + i0]
@@ -29,44 +29,60 @@ namespace mxnet
 namespace op 
 {
 __global__ void forward_shared_unroll(float *y, const float *x, const float *k, const int B, const int M, const int C, const int H, const int W, const int K, const int H_out, const int W_out) {
-  __shared__ half2 shmem_X[TILE_WIDTH][TILE_WIDTH];
+  __shared__ half2 shmem_X[TILE_WIDTH][TILE_WIDTH * GRANULARITY / 2];
   __shared__ half2 shmem_K[TILE_WIDTH][TILE_WIDTH];
 
   int row = by * blockDim.y + ty;
   int col = bx * blockDim.x * GRANULARITY + tx;
   int numMatACol = C * K * K;
 
-  half2 acc  = __float2half2_rn(0.f);
-  // half2 acc2 = 0;
-  // float acc3 = 0;
-  // float acc4 = 0;
+  half2 acc1 = __float2half2_rn(0.f);
+  half2 acc2 = __float2half2_rn(0.f);
+  half2 acc3 = __float2half2_rn(0.f);
+  half2 acc4 = __float2half2_rn(0.f);
 
   int temp_col = tx;
   int temp_row = ty;
 
-  int X_h = col / W_out;
-  int X_w = col % W_out;
+  int X_h1 = col / W_out;
+  int X_w1 = col % W_out;
 
   int X_h2 = (col + TILE_WIDTH) / W_out;
   int X_w2 = (col + TILE_WIDTH) % W_out;
 
-  // int X_h3 = (col + TILE_WIDTH*2) / W_out;
-  // int X_w3 = (col + TILE_WIDTH*2) % W_out;
+  int X_h3 = (col + TILE_WIDTH*2) / W_out;
+  int X_w3 = (col + TILE_WIDTH*2) % W_out;
 
-  // int X_h4 = (col + TILE_WIDTH*3) / W_out;
-  // int X_w4 = (col + TILE_WIDTH*3) % W_out;
+  int X_h4 = (col + TILE_WIDTH*3) / W_out;
+  int X_w4 = (col + TILE_WIDTH*3) % W_out;
+
+  int X_h5 = (col + TILE_WIDTH*4) / W_out;
+  int X_w5 = (col + TILE_WIDTH*4) % W_out;
+
+  int X_h6 = (col + TILE_WIDTH*5) / W_out;
+  int X_w6 = (col + TILE_WIDTH*5) % W_out;
+
+  int X_h7 = (col + TILE_WIDTH*6) / W_out;
+  int X_w7 = (col + TILE_WIDTH*6) % W_out;
+
+  int X_h8 = (col + TILE_WIDTH*7) / W_out;
+  int X_w8 = (col + TILE_WIDTH*7) % W_out;
 
   int K_c  = getC(temp_col);
   int K_k1 = getK1(temp_col);
   int K_k2 = getK2(temp_col);
-  int X_c = getC(temp_row);
-  int X_p = getK1(temp_row);
-  int X_q = getK2(temp_row);
-  float temp_k = k4d(row, K_c, K_k1, K_k2);
-  float temp_x  = x4d(bz, X_c, X_h + X_p,  X_w + X_q);
+  int X_c  = getC(temp_row);
+  int X_p  = getK1(temp_row);
+  int X_q  = getK2(temp_row);
+  float temp_k  = k4d(row, K_c, K_k1, K_k2);
+  float temp_x1 = x4d(bz, X_c, X_h1 + X_p, X_w1 + X_q);
   float temp_x2 = x4d(bz, X_c, X_h2 + X_p, X_w2 + X_q);
-  // float temp_x3 = x4d(bz, X_c, X_h3 + X_p, X_w3 + X_q);
-  // float temp_x4 = x4d(bz, X_c, X_h4 + X_p, X_w4 + X_q);
+  float temp_x3 = x4d(bz, X_c, X_h3 + X_p, X_w3 + X_q);
+  float temp_x4 = x4d(bz, X_c, X_h4 + X_p, X_w4 + X_q);
+  float temp_x5 = x4d(bz, X_c, X_h5 + X_p, X_w5 + X_q);
+  float temp_x6 = x4d(bz, X_c, X_h6 + X_p, X_w6 + X_q);
+  float temp_x7 = x4d(bz, X_c, X_h7 + X_p, X_w7 + X_q);
+  float temp_x8 = x4d(bz, X_c, X_h8 + X_p, X_w8 + X_q);
 
   #pragma unroll
   for (int i = 0; i < (numMatACol + TILE_WIDTH - 1) / (TILE_WIDTH); ++i) {
@@ -77,7 +93,7 @@ __global__ void forward_shared_unroll(float *y, const float *x, const float *k, 
     }
 
     if (temp_row < numMatACol && col < H_out * W_out) {
-      shmem_X[ty][tx].x = __float2half_ru(temp_x);
+      shmem_X[ty][tx].x = __float2half_ru(temp_x1);
     } else {
       shmem_X[ty][tx].x = __float2half_ru(0.f);
     }
@@ -88,17 +104,41 @@ __global__ void forward_shared_unroll(float *y, const float *x, const float *k, 
       shmem_X[ty][tx].y = __float2half_ru(0.f);
     }
 
-    // if (temp_row < numMatACol && col + TILE_WIDTH * 2 < H_out * W_out) {
-    //   shmem_X[ty][tx + TILE_WIDTH * 2] = temp_x3;
-    // } else {
-    //   shmem_X[ty][tx + TILE_WIDTH * 2] = 0;
-    // }
+    if (temp_row < numMatACol && col + TILE_WIDTH * 2 < H_out * W_out) {
+      shmem_X[ty][tx + TILE_WIDTH].x = __float2half_ru(temp_x3);
+    } else {
+      shmem_X[ty][tx + TILE_WIDTH].x = __float2half_ru(0.f);
+    }
 
-    // if (temp_row < numMatACol && col + TILE_WIDTH * 3 < H_out * W_out) {
-    //   shmem_X[ty][tx + TILE_WIDTH * 3] = temp_x4;
-    // } else {
-    //   shmem_X[ty][tx + TILE_WIDTH * 3] = 0;
-    // }
+    if (temp_row < numMatACol && col + TILE_WIDTH * 3 < H_out * W_out) {
+      shmem_X[ty][tx + TILE_WIDTH].y = __float2half_ru(temp_x4);
+    } else {
+      shmem_X[ty][tx + TILE_WIDTH].y = __float2half_ru(0.f);
+    }
+
+    if (temp_row < numMatACol && col + TILE_WIDTH * 4 < H_out * W_out) {
+      shmem_X[ty][tx + TILE_WIDTH * 2].x = __float2half_ru(temp_x5);
+    } else {
+      shmem_X[ty][tx + TILE_WIDTH * 2].x = __float2half_ru(0.f);
+    }
+
+    if (temp_row < numMatACol && col + TILE_WIDTH * 5 < H_out * W_out) {
+      shmem_X[ty][tx + TILE_WIDTH * 2].y = __float2half_ru(temp_x6);
+    } else {
+      shmem_X[ty][tx + TILE_WIDTH * 2].y = __float2half_ru(0.f);
+    }
+
+    if (temp_row < numMatACol && col + TILE_WIDTH * 6 < H_out * W_out) {
+      shmem_X[ty][tx + TILE_WIDTH * 3].x = __float2half_ru(temp_x7);
+    } else {
+      shmem_X[ty][tx + TILE_WIDTH * 3].x = __float2half_ru(0.f);
+    }
+
+    if (temp_row < numMatACol && col + TILE_WIDTH * 7 < H_out * W_out) {
+      shmem_X[ty][tx + TILE_WIDTH * 3].y = __float2half_ru(temp_x8);
+    } else {
+      shmem_X[ty][tx + TILE_WIDTH * 3].y = __float2half_ru(0.f);
+    }
 
     __syncthreads();
 
@@ -111,36 +151,56 @@ __global__ void forward_shared_unroll(float *y, const float *x, const float *k, 
     X_p = getK1(temp_row);
     X_q = getK2(temp_row);
     temp_k  = k4d(row, K_c, K_k1, K_k2);
-    temp_x  = x4d(bz, X_c, X_h + X_p,  X_w + X_q);
+    temp_x1 = x4d(bz, X_c, X_h1 + X_p, X_w1 + X_q);
     temp_x2 = x4d(bz, X_c, X_h2 + X_p, X_w2 + X_q);
-    // temp_x3 = x4d(bz, X_c, X_h3 + X_p, X_w3 + X_q);
-    // temp_x4 = x4d(bz, X_c, X_h4 + X_p, X_w4 + X_q);
+    temp_x3 = x4d(bz, X_c, X_h3 + X_p, X_w3 + X_q);
+    temp_x4 = x4d(bz, X_c, X_h4 + X_p, X_w4 + X_q);
+    temp_x5 = x4d(bz, X_c, X_h5 + X_p, X_w5 + X_q);
+    temp_x6 = x4d(bz, X_c, X_h6 + X_p, X_w6 + X_q);
+    temp_x7 = x4d(bz, X_c, X_h7 + X_p, X_w7 + X_q);
+    temp_x8 = x4d(bz, X_c, X_h8 + X_p, X_w8 + X_q);
 
     #pragma unroll
     for (int q = 0; q < TILE_WIDTH; ++q) {
-      acc  = __hfma2(shmem_K[ty][q], shmem_X[q][tx], acc);
-      // acc2 += shmem_K[ty][q] * shmem_X[q][tx + TILE_WIDTH];
-      // acc3 += shmem_K[ty][q] * shmem_X[q][tx + TILE_WIDTH*2];
-      // acc4 += shmem_K[ty][q] * shmem_X[q][tx + TILE_WIDTH*3];
+      acc1  = __hfma2(shmem_K[ty][q], shmem_X[q][tx], acc1);
+      acc2 += shmem_K[ty][q] * shmem_X[q][tx + TILE_WIDTH];
+      acc3 += shmem_K[ty][q] * shmem_X[q][tx + TILE_WIDTH*2];
+      acc4 += shmem_K[ty][q] * shmem_X[q][tx + TILE_WIDTH*3];
     }
 
     __syncthreads();
 
     if (row < M && col < W_out * H_out) {
-      y4d(bz, row, X_h,  X_w)  = __low2float(acc);
+      y4d(bz, row, X_h1,  X_w1)  = __low2float(acc1);
     }
 
     if (row < M && col + TILE_WIDTH < W_out * H_out) {
-      y4d(bz, row, X_h2, X_w2) = __high2float(acc);
+      y4d(bz, row, X_h2, X_w2) = __high2float(acc1);
     }
 
-    // if (row < M && col + TILE_WIDTH * 2 < W_out * H_out) {
-    //   y4d(bz, row, X_h3, X_w3) = acc3;
-    // }
+    if (row < M && col + TILE_WIDTH * 2 < W_out * H_out) {
+      y4d(bz, row, X_h3, X_w3) = __low2float(acc2);
+    }
 
-    // if (row < M && col + TILE_WIDTH * 3 < W_out * H_out) {
-    //   y4d(bz, row, X_h4, X_w4) = acc4;
-    // }
+    if (row < M && col + TILE_WIDTH * 3 < W_out * H_out) {
+      y4d(bz, row, X_h4, X_w4) = __high2float(acc2);
+    }
+
+    if (row < M && col + TILE_WIDTH * 4 < W_out * H_out) {
+      y4d(bz, row, X_h5, X_w5) = __low2float(acc3);
+    }
+
+    if (row < M && col + TILE_WIDTH * 5 < W_out * H_out) {
+      y4d(bz, row, X_h6, X_w6) = __high2float(acc3);
+    }
+
+    if (row < M && col + TILE_WIDTH * 6 < W_out * H_out) {
+      y4d(bz, row, X_h7, X_w7) = __low2float(acc4);
+    }
+
+    if (row < M && col + TILE_WIDTH * 7 < W_out * H_out) {
+      y4d(bz, row, X_h8, X_w8) = __high2float(acc4);
+    }
   }
 }
 
