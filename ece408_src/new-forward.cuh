@@ -74,7 +74,7 @@ __global__ void forward_shared_unroll(float *y, const float *x, const float *k, 
   int X_c  = getC(temp_row);
   int X_p  = getK1(temp_row);
   int X_q  = getK2(temp_row);
-  float temp_k  = k4d(row, K_c, K_k1, K_k2);
+  float temp_k  = __float2half_ru(k4d(row, K_c, K_k1, K_k2));
   float temp_x1 = x4d(bz, X_c, X_h1 + X_p, X_w1 + X_q);
   float temp_x2 = x4d(bz, X_c, X_h2 + X_p, X_w2 + X_q);
   float temp_x3 = x4d(bz, X_c, X_h3 + X_p, X_w3 + X_q);
@@ -87,57 +87,57 @@ __global__ void forward_shared_unroll(float *y, const float *x, const float *k, 
   #pragma unroll
   for (int i = 0; i < (numMatACol + TILE_WIDTH - 1) / (TILE_WIDTH); ++i) {
     if (temp_col < numMatACol && row < M) {
-      shmem_K[ty][tx] = __float2half2_rn(temp_k);
+      shmem_K[ty][tx] = __half2half2(temp_k);
     } else {
       shmem_K[ty][tx] = __float2half2_rn(0.f);
     }
 
     if (temp_row < numMatACol && col < H_out * W_out) {
-      shmem_X[ty][tx].x = __float2half_ru(temp_x1);
+      shmem_X[ty][tx].x = __float2half_rd(temp_x1);
     } else {
-      shmem_X[ty][tx].x = __float2half_ru(0.f);
+      shmem_X[ty][tx].x = __float2half_rd(0.f);
     }
 
     if (temp_row < numMatACol && col + TILE_WIDTH < H_out * W_out) {
-      shmem_X[ty][tx].y = __float2half_ru(temp_x2);
+      shmem_X[ty][tx].y = __float2half_rd(temp_x2);
     } else {
-      shmem_X[ty][tx].y = __float2half_ru(0.f);
+      shmem_X[ty][tx].y = __float2half_rd(0.f);
     }
 
     if (temp_row < numMatACol && col + TILE_WIDTH * 2 < H_out * W_out) {
-      shmem_X[ty][tx + TILE_WIDTH].x = __float2half_ru(temp_x3);
+      shmem_X[ty][tx + TILE_WIDTH].x = __float2half_rd(temp_x3);
     } else {
-      shmem_X[ty][tx + TILE_WIDTH].x = __float2half_ru(0.f);
+      shmem_X[ty][tx + TILE_WIDTH].x = __float2half_rd(0.f);
     }
 
     if (temp_row < numMatACol && col + TILE_WIDTH * 3 < H_out * W_out) {
-      shmem_X[ty][tx + TILE_WIDTH].y = __float2half_ru(temp_x4);
+      shmem_X[ty][tx + TILE_WIDTH].y = __float2half_rd(temp_x4);
     } else {
-      shmem_X[ty][tx + TILE_WIDTH].y = __float2half_ru(0.f);
+      shmem_X[ty][tx + TILE_WIDTH].y = __float2half_rd(0.f);
     }
 
     if (temp_row < numMatACol && col + TILE_WIDTH * 4 < H_out * W_out) {
-      shmem_X[ty][tx + TILE_WIDTH * 2].x = __float2half_ru(temp_x5);
+      shmem_X[ty][tx + TILE_WIDTH * 2].x = __float2half_rd(temp_x5);
     } else {
-      shmem_X[ty][tx + TILE_WIDTH * 2].x = __float2half_ru(0.f);
+      shmem_X[ty][tx + TILE_WIDTH * 2].x = __float2half_rd(0.f);
     }
 
     if (temp_row < numMatACol && col + TILE_WIDTH * 5 < H_out * W_out) {
-      shmem_X[ty][tx + TILE_WIDTH * 2].y = __float2half_ru(temp_x6);
+      shmem_X[ty][tx + TILE_WIDTH * 2].y = __float2half_rd(temp_x6);
     } else {
-      shmem_X[ty][tx + TILE_WIDTH * 2].y = __float2half_ru(0.f);
+      shmem_X[ty][tx + TILE_WIDTH * 2].y = __float2half_rd(0.f);
     }
 
     if (temp_row < numMatACol && col + TILE_WIDTH * 6 < H_out * W_out) {
-      shmem_X[ty][tx + TILE_WIDTH * 3].x = __float2half_ru(temp_x7);
+      shmem_X[ty][tx + TILE_WIDTH * 3].x = __float2half_rd(temp_x7);
     } else {
-      shmem_X[ty][tx + TILE_WIDTH * 3].x = __float2half_ru(0.f);
+      shmem_X[ty][tx + TILE_WIDTH * 3].x = __float2half_rd(0.f);
     }
 
     if (temp_row < numMatACol && col + TILE_WIDTH * 7 < H_out * W_out) {
-      shmem_X[ty][tx + TILE_WIDTH * 3].y = __float2half_ru(temp_x8);
+      shmem_X[ty][tx + TILE_WIDTH * 3].y = __float2half_rd(temp_x8);
     } else {
-      shmem_X[ty][tx + TILE_WIDTH * 3].y = __float2half_ru(0.f);
+      shmem_X[ty][tx + TILE_WIDTH * 3].y = __float2half_rd(0.f);
     }
 
     __syncthreads();
