@@ -6,7 +6,7 @@
 #include "cuda_fp16.h"
 
 #define MAX_NUM_THREADS 1024
-#define TILE_WIDTH_ONE  16
+#define TILE_WIDTH_ONE  12
 #define TILE_WIDTH_TWO  24
 // #define TILE_HEIGHT 16
 #define GRANULARITY 8
@@ -75,7 +75,7 @@ __global__ void forward_shared_unroll_one(float *y, const float *x, const float 
   int X_c  = getC(temp_row);
   int X_p  = getK1(temp_row);
   int X_q  = getK2(temp_row);
-  float temp_k  = __float2half_ru(k4d(row, K_c, K_k1, K_k2));
+  float temp_k  = k4d(row, K_c, K_k1, K_k2);
   float temp_x1 = x4d(bz, X_c, X_h1 + X_p, X_w1 + X_q);
   float temp_x2 = x4d(bz, X_c, X_h2 + X_p, X_w2 + X_q);
   float temp_x3 = x4d(bz, X_c, X_h3 + X_p, X_w3 + X_q);
@@ -88,57 +88,57 @@ __global__ void forward_shared_unroll_one(float *y, const float *x, const float 
   #pragma unroll
   for (int i = 0; i < (numMatACol + TILE_WIDTH_ONE - 1) / (TILE_WIDTH_ONE); ++i) {
     if (temp_col < numMatACol && row < M) {
-      shmem_K[ty][tx] = __half2half2(temp_k);
+      shmem_K[ty][tx] = __float2half2_rn(temp_k);
     } else {
       shmem_K[ty][tx] = __float2half2_rn(0.f);
     }
 
     if (temp_row < numMatACol && col < H_out * W_out) {
-      shmem_X[ty][tx].x = __float2half_rd(temp_x1);
+      shmem_X[ty][tx].x = __float2half_ru(temp_x1);
     } else {
-      shmem_X[ty][tx].x = __float2half_rd(0.f);
+      shmem_X[ty][tx].x = __float2half_ru(0.f);
     }
 
     if (temp_row < numMatACol && col + TILE_WIDTH_ONE < H_out * W_out) {
-      shmem_X[ty][tx].y = __float2half_rd(temp_x2);
+      shmem_X[ty][tx].y = __float2half_ru(temp_x2);
     } else {
-      shmem_X[ty][tx].y = __float2half_rd(0.f);
+      shmem_X[ty][tx].y = __float2half_ru(0.f);
     }
 
     if (temp_row < numMatACol && col + TILE_WIDTH_ONE * 2 < H_out * W_out) {
-      shmem_X[ty][tx + TILE_WIDTH_ONE].x = __float2half_rd(temp_x3);
+      shmem_X[ty][tx + TILE_WIDTH_ONE].x = __float2half_ru(temp_x3);
     } else {
-      shmem_X[ty][tx + TILE_WIDTH_ONE].x = __float2half_rd(0.f);
+      shmem_X[ty][tx + TILE_WIDTH_ONE].x = __float2half_ru(0.f);
     }
 
     if (temp_row < numMatACol && col + TILE_WIDTH_ONE * 3 < H_out * W_out) {
-      shmem_X[ty][tx + TILE_WIDTH_ONE].y = __float2half_rd(temp_x4);
+      shmem_X[ty][tx + TILE_WIDTH_ONE].y = __float2half_ru(temp_x4);
     } else {
-      shmem_X[ty][tx + TILE_WIDTH_ONE].y = __float2half_rd(0.f);
+      shmem_X[ty][tx + TILE_WIDTH_ONE].y = __float2half_ru(0.f);
     }
 
     if (temp_row < numMatACol && col + TILE_WIDTH_ONE * 4 < H_out * W_out) {
-      shmem_X[ty][tx + TILE_WIDTH_ONE * 2].x = __float2half_rd(temp_x5);
+      shmem_X[ty][tx + TILE_WIDTH_ONE * 2].x = __float2half_ru(temp_x5);
     } else {
-      shmem_X[ty][tx + TILE_WIDTH_ONE * 2].x = __float2half_rd(0.f);
+      shmem_X[ty][tx + TILE_WIDTH_ONE * 2].x = __float2half_ru(0.f);
     }
 
     if (temp_row < numMatACol && col + TILE_WIDTH_ONE * 5 < H_out * W_out) {
-      shmem_X[ty][tx + TILE_WIDTH_ONE * 2].y = __float2half_rd(temp_x6);
+      shmem_X[ty][tx + TILE_WIDTH_ONE * 2].y = __float2half_ru(temp_x6);
     } else {
-      shmem_X[ty][tx + TILE_WIDTH_ONE * 2].y = __float2half_rd(0.f);
+      shmem_X[ty][tx + TILE_WIDTH_ONE * 2].y = __float2half_ru(0.f);
     }
 
     if (temp_row < numMatACol && col + TILE_WIDTH_ONE * 6 < H_out * W_out) {
-      shmem_X[ty][tx + TILE_WIDTH_ONE * 3].x = __float2half_rd(temp_x7);
+      shmem_X[ty][tx + TILE_WIDTH_ONE * 3].x = __float2half_ru(temp_x7);
     } else {
-      shmem_X[ty][tx + TILE_WIDTH_ONE * 3].x = __float2half_rd(0.f);
+      shmem_X[ty][tx + TILE_WIDTH_ONE * 3].x = __float2half_ru(0.f);
     }
 
     if (temp_row < numMatACol && col + TILE_WIDTH_ONE * 7 < H_out * W_out) {
-      shmem_X[ty][tx + TILE_WIDTH_ONE * 3].y = __float2half_rd(temp_x8);
+      shmem_X[ty][tx + TILE_WIDTH_ONE * 3].y = __float2half_ru(temp_x8);
     } else {
-      shmem_X[ty][tx + TILE_WIDTH_ONE * 3].y = __float2half_rd(0.f);
+      shmem_X[ty][tx + TILE_WIDTH_ONE * 3].y = __float2half_ru(0.f);
     }
 
     __syncthreads();
@@ -252,7 +252,7 @@ __global__ void forward_shared_unroll_two(float *y, const float *x, const float 
   int X_c  = getC(temp_row);
   int X_p  = getK1(temp_row);
   int X_q  = getK2(temp_row);
-  float temp_k  = __float2half_rz(k4d(row, K_c, K_k1, K_k2));
+  float temp_k  = k4d(row, K_c, K_k1, K_k2);
   float temp_x1 = x4d(bz, X_c, X_h1 + X_p, X_w1 + X_q);
   float temp_x2 = x4d(bz, X_c, X_h2 + X_p, X_w2 + X_q);
   float temp_x3 = x4d(bz, X_c, X_h3 + X_p, X_w3 + X_q);
@@ -265,57 +265,57 @@ __global__ void forward_shared_unroll_two(float *y, const float *x, const float 
   #pragma unroll
   for (int i = 0; i < (numMatACol + TILE_WIDTH_TWO - 1) / (TILE_WIDTH_TWO); ++i) {
     if (temp_col < numMatACol && row < M) {
-      shmem_K[ty][tx] = __half2half2(temp_k);
+      shmem_K[ty][tx] = __float2half2_rn(temp_k);
     } else {
       shmem_K[ty][tx] = __float2half2_rn(0.f);
     }
 
     if (temp_row < numMatACol && col < H_out * W_out) {
-      shmem_X[ty][tx].x = __float2half_rd(temp_x1);
+      shmem_X[ty][tx].x = __float2half_ru(temp_x1);
     } else {
-      shmem_X[ty][tx].x = __float2half_rd(0.f);
+      shmem_X[ty][tx].x = __float2half_ru(0.f);
     }
 
     if (temp_row < numMatACol && col + TILE_WIDTH_TWO < H_out * W_out) {
-      shmem_X[ty][tx].y = __float2half_rd(temp_x2);
+      shmem_X[ty][tx].y = __float2half_ru(temp_x2);
     } else {
-      shmem_X[ty][tx].y = __float2half_rd(0.f);
+      shmem_X[ty][tx].y = __float2half_ru(0.f);
     }
 
     if (temp_row < numMatACol && col + TILE_WIDTH_TWO * 2 < H_out * W_out) {
-      shmem_X[ty][tx + TILE_WIDTH_TWO].x = __float2half_rd(temp_x3);
+      shmem_X[ty][tx + TILE_WIDTH_TWO].x = __float2half_ru(temp_x3);
     } else {
-      shmem_X[ty][tx + TILE_WIDTH_TWO].x = __float2half_rd(0.f);
+      shmem_X[ty][tx + TILE_WIDTH_TWO].x = __float2half_ru(0.f);
     }
 
     if (temp_row < numMatACol && col + TILE_WIDTH_TWO * 3 < H_out * W_out) {
-      shmem_X[ty][tx + TILE_WIDTH_TWO].y = __float2half_rd(temp_x4);
+      shmem_X[ty][tx + TILE_WIDTH_TWO].y = __float2half_ru(temp_x4);
     } else {
-      shmem_X[ty][tx + TILE_WIDTH_TWO].y = __float2half_rd(0.f);
+      shmem_X[ty][tx + TILE_WIDTH_TWO].y = __float2half_ru(0.f);
     }
 
     if (temp_row < numMatACol && col + TILE_WIDTH_TWO * 4 < H_out * W_out) {
-      shmem_X[ty][tx + TILE_WIDTH_TWO * 2].x = __float2half_rd(temp_x5);
+      shmem_X[ty][tx + TILE_WIDTH_TWO * 2].x = __float2half_ru(temp_x5);
     } else {
-      shmem_X[ty][tx + TILE_WIDTH_TWO * 2].x = __float2half_rd(0.f);
+      shmem_X[ty][tx + TILE_WIDTH_TWO * 2].x = __float2half_ru(0.f);
     }
 
     if (temp_row < numMatACol && col + TILE_WIDTH_TWO * 5 < H_out * W_out) {
-      shmem_X[ty][tx + TILE_WIDTH_TWO * 2].y = __float2half_rd(temp_x6);
+      shmem_X[ty][tx + TILE_WIDTH_TWO * 2].y = __float2half_ru(temp_x6);
     } else {
-      shmem_X[ty][tx + TILE_WIDTH_TWO * 2].y = __float2half_rd(0.f);
+      shmem_X[ty][tx + TILE_WIDTH_TWO * 2].y = __float2half_ru(0.f);
     }
 
     if (temp_row < numMatACol && col + TILE_WIDTH_TWO * 6 < H_out * W_out) {
-      shmem_X[ty][tx + TILE_WIDTH_TWO * 3].x = __float2half_rd(temp_x7);
+      shmem_X[ty][tx + TILE_WIDTH_TWO * 3].x = __float2half_ru(temp_x7);
     } else {
-      shmem_X[ty][tx + TILE_WIDTH_TWO * 3].x = __float2half_rd(0.f);
+      shmem_X[ty][tx + TILE_WIDTH_TWO * 3].x = __float2half_ru(0.f);
     }
 
     if (temp_row < numMatACol && col + TILE_WIDTH_TWO * 7 < H_out * W_out) {
-      shmem_X[ty][tx + TILE_WIDTH_TWO * 3].y = __float2half_rd(temp_x8);
+      shmem_X[ty][tx + TILE_WIDTH_TWO * 3].y = __float2half_ru(temp_x8);
     } else {
-      shmem_X[ty][tx + TILE_WIDTH_TWO * 3].y = __float2half_rd(0.f);
+      shmem_X[ty][tx + TILE_WIDTH_TWO * 3].y = __float2half_ru(0.f);
     }
 
     __syncthreads();
@@ -417,7 +417,6 @@ void forward<gpu, float>(mshadow::Tensor<gpu, 4, float> &y,
   const int H_out = H - K + 1;
   const int W_out = W - K + 1;
 
-  // newest kernel based on exam2
   if (M == 24) {
     dim3 gridDim(((H_out*W_out-1)/(TILE_WIDTH_TWO*GRANULARITY)+1), ((M-1)/TILE_WIDTH_TWO+1), B);
     dim3 blockDim(TILE_WIDTH_TWO, TILE_WIDTH_TWO, 1);
@@ -427,6 +426,7 @@ void forward<gpu, float>(mshadow::Tensor<gpu, 4, float> &y,
     dim3 blockDim(TILE_WIDTH_ONE, TILE_WIDTH_ONE, 1);
     forward_shared_unroll_one<<<gridDim, blockDim>>>(y.dptr_,x.dptr_,w.dptr_, B,M,C,H,W,K, H_out, W_out);
   }
+  // newest kernel based on exam2
   // dim3 gridDim(ceil(1.0*H_out*W_out/TILE_WIDTH/GRANULARITY), ceil(1.0*M/TILE_WIDTH), B);
   // dim3 blockDim(TILE_WIDTH, TILE_WIDTH, 1);
   // forward_shared_unroll<<<gridDim, blockDim>>>(y.dptr_,x.dptr_,w.dptr_, B,M,C,H,W,K, H_out, W_out);

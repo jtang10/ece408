@@ -20,7 +20,8 @@ commands:
     # - /usr/bin/time python m2.1.py # execute code
     - /usr/bin/time python final.py 100 # execute code
     - /usr/bin/time python final.py 1000 # execute code
-    - /usr/bin/time python final.py 10000 # execute code
+    - /usr/bin/time python final.py # execute code
+
     # - nvprof -o timeline.nvvp python m3.1.py 100 # execute code
     # - nvprof --kernels "::forward:1" --analysis-metrics -o forward1_analysis.nvvp python m3.1.py 100 # execute code
     # - nvprof --kernels "::forward:2" --analysis-metrics -o forward2_analysis.nvprof python m3.1.py 100
