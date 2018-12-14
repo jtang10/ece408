@@ -6,7 +6,7 @@
 #include "cuda_fp16.h"
 
 #define MAX_NUM_THREADS 1024
-#define TILE_WIDTH_ONE  16
+#define TILE_WIDTH_ONE  12
 #define TILE_WIDTH_TWO  24
 // #define TILE_HEIGHT 16
 #define GRANULARITY 8
@@ -29,7 +29,9 @@ namespace mxnet
 {
 namespace op
 {
-__global__ void forward_shared_unroll_one(float *y, const float *x, const float *k, const int B, const int M, const int C, const int H, const int W, const int K, const int H_out, const int W_out) {
+__global__ void 
+__launch_bounds__(TILE_WIDTH_ONE * TILE_WIDTH_ONE, 4)
+forward_shared_unroll_one(float *y, const float *x, const float *k, const int B, const int M, const int C, const int H, const int W, const int K, const int H_out, const int W_out) {
   __shared__ half2 shmem_X[TILE_WIDTH_ONE][TILE_WIDTH_ONE * GRANULARITY / 2];
   __shared__ half2 shmem_K[TILE_WIDTH_ONE][TILE_WIDTH_ONE];
 
@@ -48,8 +50,8 @@ __global__ void forward_shared_unroll_one(float *y, const float *x, const float 
   int X_h1 = col / W_out;
   int X_w1 = col % W_out;
 
-  int X_h2 = (col + TILE_WIDTH_ONE) / W_out;
-  int X_w2 = (col + TILE_WIDTH_ONE) % W_out;
+  int X_h2 = (col + TILE_WIDTH_ONE*1) / W_out;
+  int X_w2 = (col + TILE_WIDTH_ONE*1) % W_out;
 
   int X_h3 = (col + TILE_WIDTH_ONE*2) / W_out;
   int X_w3 = (col + TILE_WIDTH_ONE*2) % W_out;
@@ -69,13 +71,11 @@ __global__ void forward_shared_unroll_one(float *y, const float *x, const float 
   int X_h8 = (col + TILE_WIDTH_ONE*7) / W_out;
   int X_w8 = (col + TILE_WIDTH_ONE*7) % W_out;
 
-  int K_c  = getC(temp_col);
-  int K_k1 = getK1(temp_col);
-  int K_k2 = getK2(temp_col);
   int X_c  = getC(temp_row);
   int X_p  = getK1(temp_row);
   int X_q  = getK2(temp_row);
-  float temp_k  = __float2half_ru(k4d(row, K_c, K_k1, K_k2));
+
+  half temp_k  = __float2half_rn(k[row * numMatACol + temp_col]);
   float temp_x1 = x4d(bz, X_c, X_h1 + X_p, X_w1 + X_q);
   float temp_x2 = x4d(bz, X_c, X_h2 + X_p, X_w2 + X_q);
   float temp_x3 = x4d(bz, X_c, X_h3 + X_p, X_w3 + X_q);
@@ -94,49 +94,49 @@ __global__ void forward_shared_unroll_one(float *y, const float *x, const float 
     }
 
     if (temp_row < numMatACol && col < H_out * W_out) {
-      shmem_X[ty][tx].x = __float2half_rd(temp_x1);
+      shmem_X[ty][tx].x = __float2half_ru(temp_x1);
     } else {
       shmem_X[ty][tx].x = __float2half_rd(0.f);
     }
 
     if (temp_row < numMatACol && col + TILE_WIDTH_ONE < H_out * W_out) {
-      shmem_X[ty][tx].y = __float2half_rd(temp_x2);
+      shmem_X[ty][tx].y = __float2half_ru(temp_x2);
     } else {
       shmem_X[ty][tx].y = __float2half_rd(0.f);
     }
 
     if (temp_row < numMatACol && col + TILE_WIDTH_ONE * 2 < H_out * W_out) {
-      shmem_X[ty][tx + TILE_WIDTH_ONE].x = __float2half_rd(temp_x3);
+      shmem_X[ty][tx + TILE_WIDTH_ONE].x = __float2half_ru(temp_x3);
     } else {
       shmem_X[ty][tx + TILE_WIDTH_ONE].x = __float2half_rd(0.f);
     }
 
     if (temp_row < numMatACol && col + TILE_WIDTH_ONE * 3 < H_out * W_out) {
-      shmem_X[ty][tx + TILE_WIDTH_ONE].y = __float2half_rd(temp_x4);
+      shmem_X[ty][tx + TILE_WIDTH_ONE].y = __float2half_ru(temp_x4);
     } else {
       shmem_X[ty][tx + TILE_WIDTH_ONE].y = __float2half_rd(0.f);
     }
 
     if (temp_row < numMatACol && col + TILE_WIDTH_ONE * 4 < H_out * W_out) {
-      shmem_X[ty][tx + TILE_WIDTH_ONE * 2].x = __float2half_rd(temp_x5);
+      shmem_X[ty][tx + TILE_WIDTH_ONE * 2].x = __float2half_ru(temp_x5);
     } else {
       shmem_X[ty][tx + TILE_WIDTH_ONE * 2].x = __float2half_rd(0.f);
     }
 
     if (temp_row < numMatACol && col + TILE_WIDTH_ONE * 5 < H_out * W_out) {
-      shmem_X[ty][tx + TILE_WIDTH_ONE * 2].y = __float2half_rd(temp_x6);
+      shmem_X[ty][tx + TILE_WIDTH_ONE * 2].y = __float2half_ru(temp_x6);
     } else {
       shmem_X[ty][tx + TILE_WIDTH_ONE * 2].y = __float2half_rd(0.f);
     }
 
     if (temp_row < numMatACol && col + TILE_WIDTH_ONE * 6 < H_out * W_out) {
-      shmem_X[ty][tx + TILE_WIDTH_ONE * 3].x = __float2half_rd(temp_x7);
+      shmem_X[ty][tx + TILE_WIDTH_ONE * 3].x = __float2half_ru(temp_x7);
     } else {
       shmem_X[ty][tx + TILE_WIDTH_ONE * 3].x = __float2half_rd(0.f);
     }
 
     if (temp_row < numMatACol && col + TILE_WIDTH_ONE * 7 < H_out * W_out) {
-      shmem_X[ty][tx + TILE_WIDTH_ONE * 3].y = __float2half_rd(temp_x8);
+      shmem_X[ty][tx + TILE_WIDTH_ONE * 3].y = __float2half_ru(temp_x8);
     } else {
       shmem_X[ty][tx + TILE_WIDTH_ONE * 3].y = __float2half_rd(0.f);
     }
@@ -145,13 +145,11 @@ __global__ void forward_shared_unroll_one(float *y, const float *x, const float 
 
     temp_col += TILE_WIDTH_ONE;
     temp_row += TILE_WIDTH_ONE;
-    K_c  = getC(temp_col);
-    K_k1 = getK1(temp_col);
-    K_k2 = getK2(temp_col);
+
     X_c = getC(temp_row);
     X_p = getK1(temp_row);
     X_q = getK2(temp_row);
-    temp_k  = k4d(row, K_c, K_k1, K_k2);
+    temp_k  = __float2half_rn(k[row * numMatACol + temp_col]);
     temp_x1 = x4d(bz, X_c, X_h1 + X_p, X_w1 + X_q);
     temp_x2 = x4d(bz, X_c, X_h2 + X_p, X_w2 + X_q);
     temp_x3 = x4d(bz, X_c, X_h3 + X_p, X_w3 + X_q);
@@ -163,50 +161,29 @@ __global__ void forward_shared_unroll_one(float *y, const float *x, const float 
 
     #pragma unroll
     for (int q = 0; q < TILE_WIDTH_ONE; ++q) {
-      acc1  = __hfma2(shmem_K[ty][q], shmem_X[q][tx], acc1);
-      acc2 += shmem_K[ty][q] * shmem_X[q][tx + TILE_WIDTH_ONE];
-      acc3 += shmem_K[ty][q] * shmem_X[q][tx + TILE_WIDTH_ONE*2];
-      acc4 += shmem_K[ty][q] * shmem_X[q][tx + TILE_WIDTH_ONE*3];
+      acc1 = __hfma2(shmem_K[ty][q], shmem_X[q][tx], acc1);
+      acc2 = __hfma2(shmem_K[ty][q], shmem_X[q][tx + TILE_WIDTH_ONE], acc2);
+      acc3 = __hfma2(shmem_K[ty][q], shmem_X[q][tx + TILE_WIDTH_ONE*2], acc3);
+      acc4 = __hfma2(shmem_K[ty][q], shmem_X[q][tx + TILE_WIDTH_ONE*3], acc4);
     }
 
     __syncthreads();
 
-    if (row < M && col < W_out * H_out) {
-      y4d(bz, row, X_h1,  X_w1)  = __low2float(acc1);
-    }
-
-    if (row < M && col + TILE_WIDTH_ONE < W_out * H_out) {
-      y4d(bz, row, X_h2, X_w2) = __high2float(acc1);
-    }
-
-    if (row < M && col + TILE_WIDTH_ONE * 2 < W_out * H_out) {
-      y4d(bz, row, X_h3, X_w3) = __low2float(acc2);
-    }
-
-    if (row < M && col + TILE_WIDTH_ONE * 3 < W_out * H_out) {
-      y4d(bz, row, X_h4, X_w4) = __high2float(acc2);
-    }
-
-    if (row < M && col + TILE_WIDTH_ONE * 4 < W_out * H_out) {
-      y4d(bz, row, X_h5, X_w5) = __low2float(acc3);
-    }
-
-    if (row < M && col + TILE_WIDTH_ONE * 5 < W_out * H_out) {
-      y4d(bz, row, X_h6, X_w6) = __high2float(acc3);
-    }
-
-    if (row < M && col + TILE_WIDTH_ONE * 6 < W_out * H_out) {
-      y4d(bz, row, X_h7, X_w7) = __low2float(acc4);
-    }
-
-    if (row < M && col + TILE_WIDTH_ONE * 7 < W_out * H_out) {
-      y4d(bz, row, X_h8, X_w8) = __high2float(acc4);
-    }
+    if (row < M && col < W_out * H_out)                      y4d(bz, row, X_h1, X_w1) = __low2float(acc1);
+    if (row < M && col + TILE_WIDTH_ONE * 1 < W_out * H_out) y4d(bz, row, X_h2, X_w2) = __high2float(acc1);
+    if (row < M && col + TILE_WIDTH_ONE * 2 < W_out * H_out) y4d(bz, row, X_h3, X_w3) = __low2float(acc2);
+    if (row < M && col + TILE_WIDTH_ONE * 3 < W_out * H_out) y4d(bz, row, X_h4, X_w4) = __high2float(acc2);
+    if (row < M && col + TILE_WIDTH_ONE * 4 < W_out * H_out) y4d(bz, row, X_h5, X_w5) = __low2float(acc3);
+    if (row < M && col + TILE_WIDTH_ONE * 5 < W_out * H_out) y4d(bz, row, X_h6, X_w6) = __high2float(acc3);
+    if (row < M && col + TILE_WIDTH_ONE * 6 < W_out * H_out) y4d(bz, row, X_h7, X_w7) = __low2float(acc4);
+    if (row < M && col + TILE_WIDTH_ONE * 7 < W_out * H_out) y4d(bz, row, X_h8, X_w8) = __high2float(acc4);
   }
 }
 
 
-__global__ void forward_shared_unroll_two(float *y, const float *x, const float *k, const int B, const int M, const int C, const int H, const int W, const int K, const int H_out, const int W_out) {
+__global__ void 
+__launch_bounds__(TILE_WIDTH_TWO * TILE_WIDTH_TWO, 2)
+forward_shared_unroll_two(float *y, const float *x, const float *k, const int B, const int M, const int C, const int H, const int W, const int K, const int H_out, const int W_out) {
   __shared__ half2 shmem_X[TILE_WIDTH_TWO][TILE_WIDTH_TWO * GRANULARITY / 2];
   __shared__ half2 shmem_K[TILE_WIDTH_TWO][TILE_WIDTH_TWO];
 
@@ -246,13 +223,11 @@ __global__ void forward_shared_unroll_two(float *y, const float *x, const float 
   int X_h8 = (col + TILE_WIDTH_TWO*7) / W_out;
   int X_w8 = (col + TILE_WIDTH_TWO*7) % W_out;
 
-  int K_c  = getC(temp_col);
-  int K_k1 = getK1(temp_col);
-  int K_k2 = getK2(temp_col);
   int X_c  = getC(temp_row);
   int X_p  = getK1(temp_row);
   int X_q  = getK2(temp_row);
-  float temp_k  = __float2half_rz(k4d(row, K_c, K_k1, K_k2));
+
+  half temp_k  = __float2half_ru(k[row * numMatACol + temp_col]);
   float temp_x1 = x4d(bz, X_c, X_h1 + X_p, X_w1 + X_q);
   float temp_x2 = x4d(bz, X_c, X_h2 + X_p, X_w2 + X_q);
   float temp_x3 = x4d(bz, X_c, X_h3 + X_p, X_w3 + X_q);
@@ -322,13 +297,10 @@ __global__ void forward_shared_unroll_two(float *y, const float *x, const float 
 
     temp_col += TILE_WIDTH_TWO;
     temp_row += TILE_WIDTH_TWO;
-    K_c  = getC(temp_col);
-    K_k1 = getK1(temp_col);
-    K_k2 = getK2(temp_col);
     X_c = getC(temp_row);
     X_p = getK1(temp_row);
     X_q = getK2(temp_row);
-    temp_k  = k4d(row, K_c, K_k1, K_k2);
+    temp_k  = __float2half_ru(k[row * numMatACol + temp_col]);
     temp_x1 = x4d(bz, X_c, X_h1 + X_p, X_w1 + X_q);
     temp_x2 = x4d(bz, X_c, X_h2 + X_p, X_w2 + X_q);
     temp_x3 = x4d(bz, X_c, X_h3 + X_p, X_w3 + X_q);
@@ -338,12 +310,12 @@ __global__ void forward_shared_unroll_two(float *y, const float *x, const float 
     temp_x7 = x4d(bz, X_c, X_h7 + X_p, X_w7 + X_q);
     temp_x8 = x4d(bz, X_c, X_h8 + X_p, X_w8 + X_q);
 
-    #pragma unroll
+    // #pragma unroll
     for (int q = 0; q < TILE_WIDTH_TWO; ++q) {
-      acc1  = __hfma2(shmem_K[ty][q], shmem_X[q][tx], acc1);
-      acc2 += shmem_K[ty][q] * shmem_X[q][tx + TILE_WIDTH_TWO];
-      acc3 += shmem_K[ty][q] * shmem_X[q][tx + TILE_WIDTH_TWO*2];
-      acc4 += shmem_K[ty][q] * shmem_X[q][tx + TILE_WIDTH_TWO*3];
+      acc1 = __hfma2(shmem_K[ty][q], shmem_X[q][tx], acc1);
+      acc2 = __hfma2(shmem_K[ty][q], shmem_X[q][tx + TILE_WIDTH_TWO], acc2);
+      acc3 = __hfma2(shmem_K[ty][q], shmem_X[q][tx + TILE_WIDTH_TWO*2], acc3);
+      acc4 = __hfma2(shmem_K[ty][q], shmem_X[q][tx + TILE_WIDTH_TWO*3], acc4);
     }
 
     __syncthreads();
